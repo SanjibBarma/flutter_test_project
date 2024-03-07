@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart' as path;
 
 void main() {
   runApp(HomePage());
@@ -15,6 +18,10 @@ class _HomePageState extends State<HomePage> {
   TextEditingController _usernameController = TextEditingController();
   TextEditingController _passwordController = TextEditingController();
   bool _rememberPassword = false;
+  bool _switchValue = false;
+  String? _usernameError;
+  String? _passwordError;
+
 
   @override
   Widget build(BuildContext context) {
@@ -37,6 +44,7 @@ class _HomePageState extends State<HomePage> {
                         ElevatedButton(
                           onPressed: () {
                             // Clean button functionality
+                            _cleanCache();
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blue,
@@ -54,13 +62,63 @@ class _HomePageState extends State<HomePage> {
                           ),
                         ),
                         Spacer(),
-                        Switch(
-                          value: false,
-                          onChanged: (value) {
-                            // Switch functionality
+
+                        GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _switchValue = !_switchValue;
+                            });
                           },
+                          child: Container(
+                            width: 70.0,
+                            height: 30.0,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(15.0),
+                              color: _switchValue ? Colors.green : Colors.red,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: _switchValue ? MainAxisAlignment.end : MainAxisAlignment.start,
+                              children: <Widget>[
+                                _switchValue
+                                    ? Padding(
+                                  padding: EdgeInsets.only(right: 5.0),
+                                  child: Text(
+                                    'BN',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                )
+                                    : SizedBox(),
+                                Container(
+                                  width: 30.0,
+                                  height: 30.0,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.white,
+                                  ),
+                                  child: Center(
+                                    child: Container(
+                                      width: 20.0,
+                                      height: 20.0,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: _switchValue ? Colors.white : Colors.red,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                !_switchValue
+                                    ? Padding(
+                                  padding: EdgeInsets.only(left: 5.0),
+                                  child: Text(
+                                    'EN',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                )
+                                    : SizedBox(),
+                              ],
+                            ),
+                          ),
                         ),
-                        Text('EN'),
                       ],
                     ),
                   ),
@@ -97,14 +155,32 @@ class _HomePageState extends State<HomePage> {
                     border: Border.all(color: Colors.grey),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: TextFormField(
-                    controller: _usernameController,
-                    decoration: InputDecoration(
-                      hintText: 'Username',
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 20),
-                    ),
-                  ),
+                  child: Stack(
+                    alignment: Alignment.centerRight,
+                    children: [
+                      TextFormField(
+                        controller: _usernameController,
+                        decoration: InputDecoration(
+                          hintText: 'Username',
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 20),
+                        ),
+                        onChanged: (value) {
+                          setState(() {
+                            _usernameError = value.isEmpty ? 'Please enter a username' : null;
+                          });
+                        },
+                      ),
+                      if (_usernameError != null)
+                        Positioned(
+                          right: 50,
+                          child: Text(
+                            _usernameError!,
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        ),
+                    ],
+                  )
                 ),
 
                 SizedBox(height: 16),
@@ -114,20 +190,22 @@ class _HomePageState extends State<HomePage> {
                     border: Border.all(color: Colors.grey),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Row(
+                  child: Stack(
+                    alignment: Alignment.centerRight,
                     children: [
-                      Expanded(
-                        child: Container(
-                          child: TextFormField(
-                            controller: _passwordController,
-                            obscureText: !_isPasswordVisible,
-                            decoration: InputDecoration(
-                              hintText: 'Password',
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.symmetric(horizontal: 20),
-                            ),
-                          ),
+                      TextFormField(
+                        controller: _passwordController,
+                        obscureText: !_isPasswordVisible,
+                        decoration: InputDecoration(
+                          hintText: 'Password',
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 20),
                         ),
+                        onChanged: (value) {
+                          setState(() {
+                            _passwordError = value.isEmpty ? 'Please enter a password' : null;
+                          });
+                        },
                       ),
                       GestureDetector(
                         onTap: () {
@@ -144,9 +222,18 @@ class _HomePageState extends State<HomePage> {
                           child: Icon(_isPasswordVisible ? Icons.visibility : Icons.visibility_off),
                         ),
                       ),
+                      if (_passwordError != null)
+                        Positioned(
+                          right: 50,
+                          child: Text(
+                            _passwordError!,
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        ),
                     ],
                   ),
                 ),
+
 
                 SizedBox(height: 16),
 
@@ -170,13 +257,23 @@ class _HomePageState extends State<HomePage> {
                 InkWell(
                   onTap: () {
                     // Login button functionality
-                    if(_rememberPassword){
-                      _showToast("Username: ${_usernameController.text}\nPassword: ${_passwordController.text}");
-                    }else{
-                      _showToast("No name and password");
-
+                    if (_usernameController.text.isEmpty) {
+                      _usernameError = 'Please enter a username';
+                    } else {
+                      _usernameError = null;
                     }
 
+                    if (_passwordController.text.isEmpty) {
+                      _passwordError = 'Please enter a password';
+                    } else {
+                      _passwordError = null;
+                    }
+
+                    if (_rememberPassword) {
+                      _showToast("Username: ${_usernameController.text}\nPassword: ${_passwordController.text}");
+                    } else {
+                      _showToast("No username and password");
+                    }
 
                   },
                   child: Card(
@@ -230,6 +327,17 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
+}
+
+
+
+void _cleanCache() async {
+  DefaultCacheManager().emptyCache().then((_) {
+    _showToast("App cache has been cleared");
+  }).catchError((error) {
+    print("Error clearing cache: $error");
+    _showToast("Failed to clear app cache");
+  });
 }
 
 void _showToast(String message) {
